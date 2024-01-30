@@ -258,7 +258,7 @@ __global__ void preprocessCUDA(int P, int D, int M,
 // Main rasterization method. Collaboratively works on one tile per
 // block, each thread treats one pixel. Alternates between fetching 
 // and rasterizing data.
-template <uint32_t CHANNELS>
+template <uint32_t CHANNELS, uint32_t FEATS_CHANNELS>
 __global__ void __launch_bounds__(BLOCK_X * BLOCK_Y)
 renderCUDA(
 	const uint2* __restrict__ ranges,
@@ -266,12 +266,14 @@ renderCUDA(
 	int W, int H,
 	const float2* __restrict__ points_xy_image,
 	const float* __restrict__ features,
+	const float* __restrict__ feats3D,
 	const float* __restrict__ depths,
 	const float4* __restrict__ conic_opacity,
 	float* __restrict__ out_alpha,
 	uint32_t* __restrict__ n_contrib,
 	const float* __restrict__ bg_color,
 	float* __restrict__ out_color,
+	float* __restrict__ out_feats,
 	float* __restrict__ out_depth)
 {
 	// Identify current tile and associated min/max pixel range.
@@ -303,6 +305,7 @@ renderCUDA(
 	uint32_t contributor = 0;
 	uint32_t last_contributor = 0;
 	float C[CHANNELS] = { 0 };
+	float F[FEATS_CHANNELS] = { 0 };
 	float D = 0;
 
 	// Iterate over batches until all done or range is complete
@@ -356,6 +359,8 @@ renderCUDA(
 			// Eq. (3) from 3D Gaussian splatting paper.
 			for (int ch = 0; ch < CHANNELS; ch++)
 				C[ch] += features[collected_id[j] * CHANNELS + ch] * alpha * T;
+			for (int ch = 0; ch < FEATS_CHANNELS; ch++)
+				F[ch] += feats3D[collected_id[j] * FEATS_CHANNELS + ch] * alpha * T;
 			D += depths[collected_id[j]] * alpha * T;
 			T = test_T;
 
@@ -373,6 +378,8 @@ renderCUDA(
 		n_contrib[pix_id] = last_contributor;
 		for (int ch = 0; ch < CHANNELS; ch++)
 			out_color[ch * H * W + pix_id] = C[ch] + T * bg_color[ch];
+		for (int ch = 0; ch < FEATS_CHANNELS; ch++)
+			out_feats[ch * H * W + pix_id] = F[ch];
 		out_depth[pix_id] = D;
 	}
 }
@@ -384,26 +391,30 @@ void FORWARD::render(
 	int W, int H,
 	const float2* means2D,
 	const float* colors,
+	const float* feats3D,
 	const float* depths,
 	const float4* conic_opacity,
 	float* out_alpha,
 	uint32_t* n_contrib,
 	const float* bg_color,
 	float* out_color,
+	float* out_feats,
 	float* out_depth)
 {
-	renderCUDA<NUM_CHANNELS> << <grid, block >> > (
+	renderCUDA<NUM_CHANNELS, NUM_FEATS_CHANNELS> << <grid, block >> > (
 		ranges,
 		point_list,
 		W, H,
 		means2D,
 		colors,
+		feats3D,
 		depths,
 		conic_opacity,
 		out_alpha,
 		n_contrib,
 		bg_color,
 		out_color,
+		out_feats,
 		out_depth);
 }
 

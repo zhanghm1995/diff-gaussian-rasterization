@@ -422,16 +422,19 @@ renderCUDA(
 	const float2* __restrict__ points_xy_image,
 	const float4* __restrict__ conic_opacity,
 	const float* __restrict__ colors,
+	const float* __restrict__ feats3D,
 	const float* __restrict__ depths,
 	const float* __restrict__ accum_alphas,
 	const uint32_t* __restrict__ n_contrib,
 	const float* __restrict__ dL_dpixels,
+	const float* __restrict__ dL_dfeats2D,
 	const float* __restrict__ dL_dpixel_depths,
 	const float* __restrict__ dL_dpixel_alphas,
 	float3* __restrict__ dL_dmean2D,
 	float4* __restrict__ dL_dconic2D,
 	float* __restrict__ dL_dopacity,
 	float* __restrict__ dL_dcolors,
+	float* __restrict__ dL_dfeats3D,
 	float* __restrict__ dL_ddepths)
 {
 	// We rasterize again. Compute necessary block info.
@@ -455,6 +458,7 @@ renderCUDA(
 	__shared__ float2 collected_xy[BLOCK_SIZE];
 	__shared__ float4 collected_conic_opacity[BLOCK_SIZE];
 	__shared__ float collected_colors[C * BLOCK_SIZE];
+	__shared__ float collected_feats[FC * BLOCK_SIZE];
 	__shared__ float collected_depths[BLOCK_SIZE];
 
 	// In the forward, we stored the final value for T, the
